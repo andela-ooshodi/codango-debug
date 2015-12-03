@@ -14,12 +14,12 @@ test:
     - python codango/manage.py collectstatic --noinput --settings=codango.settings.test
     - python codango/manage.py test codango --settings=codango.settings.test
 deployment:
-  staging:
-    branch: develop
+  debug:
+    branch: master
     commands:
       - git fetch origin --unshallow
-      - git push -f git@heroku.com:codango-staging.git $CIRCLE_SHA1:master
-      - heroku run python codango/manage.py collectstatic --noinput --settings=codango.settings --app codango-staging
-      - heroku run python codango/manage.py makemigrations --settings=codango.settings --app codango-staging
-      - heroku run python codango/manage.py migrate --settings=codango.settings --app codango-staging
-      - heroku ps:scale web=1 --app codango-staging
+      - git push -f git@heroku.com:codango-debug.git $CIRCLE_SHA1:master
+      - heroku run python codango/manage.py collectstatic --noinput --settings=codango.settings --app codango-debug
+      - heroku run python codango/manage.py makemigrations --settings=codango.settings --app codango-debug
+      - heroku run python codango/manage.py migrate --settings=codango.settings --app codango-debug
+      - heroku ps:scale web=1 --app codango-debug
