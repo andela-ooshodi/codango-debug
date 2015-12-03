@@ -1,19 +1,21 @@
 from django.test import TestCase
-from account import emails
-from account.emails import send_mail
+from mock import patch
+from account.emails import SendGrid
 
 
 class EmailTestCase(TestCase):
 
     def setUp(self):
-        pass
-
-    def test_send_email_returns_request_status(self):
-        response = send_mail(
-            sender='Codango Tests <codango@andela.com>',
-            recipient='inioluwafageyinbo@gmail',
-            subject='Codango Email Integration With Mailgun (Tests)',
-            html="<p>Codango</p>",
-            text="Codango Testing",
+        self.email = SendGrid.compose(
+            sender='Codango <codango@andela.com>',
+            recipient='olufunmilade.oshodi@andela.com',
+            subject='Codango: Password Recovery',
+            text="This is a test",
+            html=None,
         )
-        self.assertIsInstance(response.status_code, int)
+
+    # mock sendgrid send method when sending mails
+    def test_send_email(self):
+        with patch.object(SendGrid, 'send', return_value=200) as mock_method:
+            response = mock_method(self.email)
+            self.assertEquals(response, 200)

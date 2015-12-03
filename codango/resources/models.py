@@ -14,7 +14,7 @@ class Resource(models.Model):
         ('JAVA', 'Java'),
         ('PHP', 'PHP'),
         ('IOS', 'IOS'),
-        ('JS', 'Javascript'),
+        ('JAVASCRIPT', 'Javascript'),
         ('C', 'C')
     )
 
@@ -22,7 +22,10 @@ class Resource(models.Model):
     text = models.TextField(null=True, blank=False)
     language_tags = models.CharField(
         max_length=30, choices=LANGUAGE_TAGS, default='Untagged')
-    resource_file = CloudinaryField('resource_file', null=True, blank=True)
+    resource_file = CloudinaryField(
+        'resource_file', null=True, blank=True)
+    resource_file_name = models.CharField(max_length=100, null=True)
+    resource_file_size = models.IntegerField(default=0)
     snippet_text = models.TextField(null=True, blank=True)
     date_added = models.DateTimeField(auto_now_add=True)
     date_modified = models.DateTimeField(auto_now=True)
@@ -32,3 +35,15 @@ class Resource(models.Model):
 
     def get_absolute_url(self):
         return reverse('detail', args=[str(self.id)])
+
+    def upvotes(self):
+        liked_ids = [
+            vote.user.id for vote in self.votes.all() if vote.vote is True]
+
+        return liked_ids
+
+    def downvotes(self):
+        unliked_ids = [
+            vote.user.id for vote in self.votes.all() if vote.vote is False]
+
+        return unliked_ids

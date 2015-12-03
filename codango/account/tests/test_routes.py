@@ -2,6 +2,8 @@ from django.test import TestCase, Client
 from django.contrib.auth.models import User
 from django.core.urlresolvers import resolve, reverse
 from account.views import ForgotPasswordView, ResetPasswordView
+from mock import patch
+from account.emails import SendGrid
 
 
 class IndexViewTest(TestCase):
@@ -67,7 +69,7 @@ class ForgotResetTestCase(TestCase):
         self.client = Client()
 
     def test_forgot_route_resolves_to_correct_view(self):
-        response = self.client.get('/recovery/')
+        response = self.client.get('/recovery')
         self.assertEqual(
             response.resolver_match.func.__name__, ForgotPasswordView.as_view().__name__)
 
@@ -91,21 +93,12 @@ class PasswordResetTestCase(TestCase):
         self.user_account.save()
 
     def test_get_returns_200(self):
-        response = self.client.get('/recovery/')
+        response = self.client.get('/recovery')
         self.assertEquals(response.status_code, 200)
-
-    def test_post_returns_200(self):
-        response = self.client.get('/recovery/')
-        self.assertEquals(response.status_code, 200)
-
-    def test_recovery_email_sent_for_registered_user(self):
-        response = self.client.post(
-            '/recovery/', {"email": self.user_account.email})
-        self.assertIn("email_status", response.context)
 
     def test_recovery_email_not_sent_for_unregistered_user(self):
         response = self.client.post(
-            '/recovery/', {"email": "fagemaki.iniruto@gmail.com"})
+            '/recovery', {"email": "fagemaki.iniruto@gmail.com"})
         self.assertNotIn('email_status', response.context)
 
 
@@ -129,5 +122,60 @@ class ProfileViewTestCase(TestCase):
     def test_can_reach_profile_edit_page(self):
         response = self.client.post('/user/lade/edit',
                                     {'position': 'Software Developer',
-                                     'place_of_work': 'Andela'})
+                                     'place_of_work': 'Andela',
+                                     'first_name': 'Lade',
+                                     'last_name': 'Oshodi',
+                                     'about': 'I love to Code'})
         self.assertEqual(response.status_code, 302)
+
+
+class ContactUsViewTest(TestCase):
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_can_reach_contact_us_page(self):
+        response = self.client.get(reverse('contactus'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_right_template_for_contact_us_page_is_returned(self):
+        response = self.client.get(reverse('contactus'))
+        self.assertEqual(response.templates[0].name, 'account/contact-us.html')
+
+    @patch.object(SendGrid, 'send')
+    def test_send_message(self, mock_method):
+        response = self.client.post('/contact-us', {
+            'name': 'Test User',
+            'email': 'test.user@test.com',
+            'subject': 'Test',
+            'message': 'This is a test message'
+        })
+        self.assertEqual(response.status_code, 302)
+
+
+class AboutUsViewTest(TestCase):
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_can_reach_about_us_page(self):
+        response = self.client.get(reverse('aboutus'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_right_template_for_about_us_page_is_returned(self):
+        response = self.client.get(reverse('aboutus'))
+        self.assertEqual(response.templates[0].name, 'account/about-us.html')
+
+
+class TeamViewTest(TestCase):
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_can_reach_team_page(self):
+        response = self.client.get(reverse('team'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_right_template_for_team_page_is_returned(self):
+        response = self.client.get(reverse('team'))
+        self.assertEqual(response.templates[0].name, 'account/team.html')

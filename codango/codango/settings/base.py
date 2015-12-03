@@ -11,8 +11,17 @@ https://docs.djangoproject.com/en/1.8/ref/settings/
 """
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
+from __future__ import absolute_import
 import os
 import cloudinary
+
+# This will make sure the app is always imported when
+# Django starts so that shared_task will use this app.
+from .celery import app as celery_app
+
+from django.conf.global_settings import TEMPLATE_CONTEXT_PROCESSORS
+from django.contrib.messages import constants as message_constants
+from celery.schedules import crontab
 
 
 BASE_DIR = os.path.dirname(
@@ -27,6 +36,13 @@ BOWER_INSTALLED_APPS = (
 )
 
 BOWER_COMPONENTS_ROOT = os.path.join(BASE_DIR, 'static')
+
+# context processor for django-endless-pagination
+TEMPLATE_CONTEXT_PROCESSORS += (
+    'django.core.context_processors.request',
+)
+
+ENDLESS_PAGINATION_LOADING = """<img src="/static/img/ajax-loader.gif" alt="loading"/>"""
 
 STATICFILES_FINDERS = (
     'django.contrib.staticfiles.finders.FileSystemFinder',
@@ -56,10 +72,14 @@ INSTALLED_APPS = (
     'django.contrib.staticfiles',
     'account',
     'resources',
+    'userprofile',
+    'comments',
+    'votes',
     'bootstrapform',
     'cloudinary',
     'djangobower',
-
+    'endless_pagination',
+    'djcelery'
 )
 
 MIDDLEWARE_CLASSES = (
@@ -128,8 +148,6 @@ STATIC_ROOT = 'staticfiles'
 
 STATICFILES_STORAGE = 'whitenoise.django.GzipManifestStaticFilesStorage'
 
-LOGIN_URL = '/'
-
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 MEDIA_URL = '/media/'
 
@@ -138,3 +156,32 @@ cloudinary.config(
     api_key=os.getenv('api_key'),
     api_secret=os.getenv('api_secret')
 )
+
+# custom message tag for django messaging middleware
+MESSAGE_TAGS = {
+    message_constants.ERROR: 'danger'
+}
+
+# Custom Email
+ADMIN_EMAIL = 'olufunmilade.oshodi@andela.com'
+CODANGO_EMAIL = 'noreply@codango.com'
+
+
+# Celery configuration
+# The backend used to store task results using RabbitMQ as a broker
+# This sends results back as AMQP messages
+CELERY_RESULT_BACKEND = 'amqp'
+
+
+# Scheduling periodic task with Celery
+CELERYBEAT_SCHEDULE = {
+    # Executes every sunday midnight
+    'popular-post-updates': {
+        'task': 'resources.tasks.send_recent_posts',
+        'schedule': crontab(),
+        'args': (ADMIN_EMAIL,),
+    },
+}
+
+# Celery Test Runner for unit tests
+TEST_RUNNER = 'djcelery.contrib.test_runner.CeleryTestSuiteRunner'

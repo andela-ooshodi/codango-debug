@@ -5,17 +5,15 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login
 from django.template.context_processors import csrf
 from django.contrib.auth.models import User
-from django.contrib.auth.decorators import login_required
-from django.utils.decorators import method_decorator
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse
 from django.template import RequestContext, loader
 from account.hash import UserHasher
-from emails import send_mail
-from resources.models import Resource
-from resources.forms import ResourceForm
-from account.forms import LoginForm, RegisterForm, ResetForm, UserProfileForm
-from account.models import UserProfile
+from emails import SendGrid
+from resources.views import CommunityBaseView
+from account.forms import LoginForm, RegisterForm, ResetForm, ContactUsForm
+from userprofile.models import UserProfile
+from codango.settings.base import ADMIN_EMAIL, CODANGO_EMAIL
 
 
 class IndexView(TemplateView):
@@ -46,7 +44,8 @@ class LoginView(IndexView):
 
         if self.request.is_ajax():
             try:
-                userprofile = UserProfile.objects.get(fb_id=request.POST['id'])
+                userprofile = UserProfile.objects.get(
+                    social_id=request.POST['id'])
                 user = userprofile.get_user()
                 user.backend = 'django.contrib.auth.backends.ModelBackend'
                 login(request, user)
@@ -95,13 +94,14 @@ class RegisterView(IndexView):
             login(request, new_user)
             messages.add_message(
                 request, messages.SUCCESS, 'Registered Successfully!')
-
-            if 'fb_id' not in request.POST:
-                pass
-            else:
-                new_profile = new_user.profile
-                new_profile.fb_id = request.POST['fb_id']
-                new_profile.save()
+            new_profile = new_user.profile
+            new_profile.social_id = request.POST[
+                'social_id'] if 'social_id' in request.POST else None
+            new_profile.first_name = request.POST[
+                'first_name'] if 'first_name' in request.POST else None
+            new_profile.last_name = request.POST[
+                'last_name'] if 'last_name' in request.POST else None
+            new_profile.save()
 
             return redirect(
                 '/user/' + self.request.user.username + '/edit',
@@ -113,48 +113,68 @@ class RegisterView(IndexView):
             return render(request, self.template_name, context)
 
 
-class LoginRequiredMixin(object):
-    # View mixin which requires that the user is authenticated.
-
-    @method_decorator(login_required)
-    def dispatch(self, request, *args, **kwargs):
-        return super(LoginRequiredMixin, self).dispatch(
-            request, *args, **kwargs)
-
-
-class HomeView(LoginRequiredMixin, TemplateView):
-    form_class = ResourceForm
-    template_name = 'account/home.html'
+class ContactUsView(TemplateView):
+    form_class = ContactUsForm
+    template_name = 'account/contact-us.html'
 
     def get_context_data(self, **kwargs):
-        context = super(HomeView, self).get_context_data(**kwargs)
-        resources = reversed(Resource.objects.all())
-        user = self.request.user
-        context = {'resources': resources, 'profile': user.profile, 'title': 'Activity Feed'}
-
+        context = super(ContactUsView, self).get_context_data(**kwargs)
+        context['contactusform'] = ContactUsForm()
         return context
 
     def post(self, request, *args, **kwargs):
-        form = self.form_class(request.POST, request.FILES)
-        resource = form.save(commit=False)
-        resource.author = self.request.user
-        resource.save()
-        return HttpResponse("success", content_type='text/plain')
+        # get email data from form
+        form = self.form_class(request.POST)
+        if form.is_valid():
+            name = request.POST['name']
+            email = request.POST['email']
+            subject = request.POST['subject']
+            message = request.POST['message']
 
+            # compose the email
+            email_compose = SendGrid.compose(
+                sender='{0} <{1}>'.format(name, email),
+                recipient=ADMIN_EMAIL,
+                subject=subject,
+                text=message,
+                html=None
+            )
 
-class AjaxCommunityView(HomeView):
-    template_name = 'account/community.html'
+            # send email
+            response = SendGrid.send(email_compose)
 
-    def get_context_data(self, **kwargs):
-        context = super(AjaxCommunityView, self).get_context_data(**kwargs)
-        community = kwargs['community'].upper()
-        if community == 'ALL':
-            resources = reversed(Resource.objects.all())
+            # inform the user if mail sent was successful or not
+            if response == 200:
+                messages.add_message(
+                    request, messages.SUCCESS, 'Message sent successfully!')
+                return redirect(
+                    '/contact-us',
+                    context_instance=RequestContext(request)
+                )
+            else:
+                messages.add_message(
+                    request, messages.ERROR,
+                    'Message failed to send, please try again later')
+                return redirect(
+                    '/contact-us',
+                    context_instance=RequestContext(request)
+                )
         else:
-            resources = reversed(
-                Resource.objects.filter(language_tags=community))
-        context = {'resources': resources}
-        return context
+            context = super(ContactUsView, self).get_context_data(**kwargs)
+            context['contactusform'] = form
+            return render(request, self.template_name, context)
+
+
+class AboutUsView(TemplateView):
+    template_name = 'account/about-us.html'
+
+
+class TeamView(TemplateView):
+    template_name = 'account/team.html'
+
+
+class HomeView(CommunityBaseView):
+    pass
 
 
 class ForgotPasswordView(TemplateView):
@@ -163,31 +183,48 @@ class ForgotPasswordView(TemplateView):
 
     def post(self, request, *args, **kwargs):
         try:
+            # get the email inputted
             email_inputted = request.POST.get("email")
+
+            # query the database if that email exists
             user = User.objects.get(email=email_inputted)
+
+            # generate a recovery hash for that user
             user_hash = UserHasher.gen_hash(user)
             user_hash_url = request.build_absolute_uri(
                 reverse('reset_password', kwargs={'user_hash': user_hash}))
-
             hash_email_context = RequestContext(
                 request, {'user_hash_url': user_hash_url})
-            email_reponse = send_mail(
-                sender='Codango <codango@andela.com>',
+
+            # compose the email
+            email_compose = SendGrid.compose(
+                sender='Codango <{}>'.format(CODANGO_EMAIL),
                 recipient=user.email,
                 subject='Codango: Password Recovery',
                 text=loader.get_template(
-                    'account/forgot-password-email.txt').render(hash_email_context),
+                    'account/forgot-password-email.txt'
+                ).render(hash_email_context),
                 html=loader.get_template(
-                    'account/forgot-password-email.html').render(hash_email_context),
+                    'account/forgot-password-email.html'
+                ).render(hash_email_context),
             )
+
+            # send email
+            email_response = SendGrid.send(email_compose)
+
+            # inform the user if mail sent was successful
             context = {
-                "email_status": email_reponse.status_code
+                "email_status": email_response
             }
-            return render(request, 'account/forgot-password-status.html', context)
+            return render(
+                request,
+                'account/forgot-password-status.html',
+                context
+            )
 
         except ObjectDoesNotExist:
             messages.add_message(
-                request, messages.INFO,
+                request, messages.ERROR,
                 'The email specified does not belong to any valid user.')
             return render(request, 'account/forgot-password.html')
 
@@ -206,14 +243,19 @@ class ResetPasswordView(View):
                     "password_reset_form": ResetForm(auto_id=True)
                 }
                 context.update(csrf(request))
-                return render(request, 'account/forgot-password-reset.html', context)
+                return render(
+                    request,
+                    'account/forgot-password-reset.html',
+                    context
+                )
             else:
                 messages.add_message(
                     request, messages.ERROR, 'Account not activated!')
                 return HttpResponse(
                     'Account not activated!',
                     status_code=403,
-                    reason_phrase='You are not allowed to view this content because your account is not activated!'
+                    reason_phrase='You are not allowed to view this\
+                    content because your account is not activated!'
                 )
         else:
             raise Http404("User does not exist")
@@ -246,64 +288,3 @@ class ResetPasswordView(View):
         }
         context.update(csrf(request))
         return render(request, 'account/forgot-password-reset.html', context)
-
-
-class UserProfileDetailView(TemplateView):
-    model = UserProfile
-    template_name = 'account/profile.html'
-
-    def get_context_data(self, **kwargs):
-        context = super(UserProfileDetailView, self).get_context_data(**kwargs)
-        username = kwargs['username']
-        if self.request.user.username == username:
-            user = self.request.user
-        else:
-            user = User.objects.get(username=username)
-            if user is None:
-                return Http404("User does not exist")
-
-        context['profile'] = user.profile
-        context['resources'] = user.resource_set.all()
-        context['title'] = "My Feed"
-        return context
-
-
-class UserProfileEditView(LoginRequiredMixin, TemplateView):
-    form_class = UserProfileForm
-    template_name = 'account/profile-edit.html'
-
-    def get_context_data(self, **kwargs):
-        context = super(UserProfileEditView, self).get_context_data(**kwargs)
-        username = kwargs['username']
-        if self.request.user.username == username:
-            user = self.request.user
-        else:
-            pass
-
-        context['profile'] = user.profile
-        context['resources'] = user.resource_set.all()
-        context['profileform'] = self.form_class(initial={
-            'about': self.request.user.profile.about,
-            'first_name': self.request.user.profile.first_name,
-            'last_name': self.request.user.profile.last_name,
-            'place_of_work': self.request.user.profile.place_of_work,
-            'position': self.request.user.profile.position
-        })
-        return context
-
-    def post(self, request, **kwargs):
-        form = self.form_class(
-            request.POST, request.FILES, instance=request.user.profile)
-        if form.is_valid():
-            form.save()
-            messages.add_message(
-                request, messages.SUCCESS, 'Profile Updated!')
-            return redirect(
-                '/user/' + kwargs['username'],
-                context_instance=RequestContext(request)
-            )
-        else:
-            context = super(
-                UserProfileEditView, self).get_context_data(**kwargs)
-            context['profileform'] = self.form_class
-            return render(request, self.template_name, context)

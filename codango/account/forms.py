@@ -1,6 +1,5 @@
 from django import forms
 from django.contrib.auth.models import User
-from models import UserProfile
 
 
 class LoginForm(forms.Form):
@@ -65,31 +64,19 @@ class RegisterForm(forms.Form):
 
 class ResetForm(forms.Form):
 
-    password = forms.CharField(label='New Password', required=True,
-                               max_length=200, widget=forms.PasswordInput(
-                                   attrs={"placeholder": "Your New Password"
-                                          }))
+    password = forms.CharField(
+        label='New Password', required=True,
+        max_length=200, widget=forms.PasswordInput(
+            attrs={"placeholder": "Your New Password"
+                   }))
 
-    password_conf = forms.CharField(label='Confirm New Password',
-                                    required=True, max_length=200,
-                                    widget=forms.PasswordInput(
-                                        attrs={
-                                            "placeholder": "Confirm Your New Password"
-                                        }))
-
-
-class UserProfileForm(forms.ModelForm):
-
-    class Meta:
-        model = UserProfile
-        fields = ['first_name', 'last_name', 'place_of_work', 'position','about', 'image']
-        labels = {
-            'first_name': 'First name',
-            'last_name': 'Last name',
-            'place_of_work': 'Place of work',
-            'position': 'Position',
-            'about': 'About'
-        }
+    password_conf = forms.CharField(
+        label='Confirm New Password',
+        required=True, max_length=200,
+        widget=forms.PasswordInput(
+            attrs={
+                "placeholder": "Confirm Your New Password"
+            }))
 
 
 class UserUpdateForm(forms.ModelForm):
@@ -97,3 +84,30 @@ class UserUpdateForm(forms.ModelForm):
     class Meta:
         Model = User
         fields = ['first_name', 'last_name']
+
+
+class ContactUsForm(forms.Form):
+    name = forms.CharField(
+        label='Name', max_length=100,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Enter fullname',
+            'autocomplete': 'off'
+        }))
+
+    email = forms.EmailField(
+        label='Email Address', max_length=100,
+        widget=forms.EmailInput(attrs={
+            'placeholder': 'john.doe@example.com',
+            'autocomplete': 'off'
+        }))
+
+    subject = forms.CharField(
+        label='Subject', max_length=100,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Please give a title to your message',
+            'autocomplete': 'off'
+        }))
+
+    message = forms.CharField(
+        label='Message', widget=forms.Textarea(attrs={
+            'placeholder': 'Please enter your message here'}))

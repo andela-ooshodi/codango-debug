@@ -39,9 +39,7 @@ class IndexViewTest(StaticLiveServerTestCase):
         self.assertIn('Join Our Community', body.text)
 
 
-class UserProfileTest(StaticLiveServerTestCase):
-    fixtures = ['users.json']
-
+class StaticPages(StaticLiveServerTestCase):
 
     def setUp(self):
         self.browser = webdriver.PhantomJS()
@@ -51,26 +49,24 @@ class UserProfileTest(StaticLiveServerTestCase):
     def tearDown(self):
         self.browser.quit()
 
-    def test_can_reach_profile_page(self):
+    def test_can_reach_static_pages(self):
         self.browser.get(self.live_server_url)
 
+        # index page
         body = self.browser.find_element_by_tag_name('body')
-        self.assertIn('Codango', body.text)
+        self.assertIn('Join Our Community', body.text)
 
-        # logging in username and password
-        username_field = self.browser.find_element_by_name('username')
-        username_field.send_keys('lade')
-
-        password_field = self.browser.find_element_by_name('password')
-        password_field.send_keys('password')
-        password_field.send_keys(Keys.RETURN)
-
-        # username and password accepted
+        # about us page
+        self.browser.find_element_by_link_text('About Us').click()
         body = self.browser.find_element_by_tag_name('body')
-        self.assertIn('Share', body.text)
+        self.assertIn('About us', body.text)
 
-        # User profile
-        self.browser.find_element_by_link_text('lade').click()
-        self.browser.find_element_by_link_text('View Profile').click()
+        # contact us page
+        self.browser.find_element_by_link_text('Contact Us').click()
         body = self.browser.find_element_by_tag_name('body')
-        self.assertIn('@lade', body.text)
+        self.assertIn('Contact us', body.text)
+
+        # team page
+        self.browser.find_element_by_link_text('Team').click()
+        body = self.browser.find_element_by_tag_name('body')
+        self.assertIn('Our Awesome Team', body.text)
